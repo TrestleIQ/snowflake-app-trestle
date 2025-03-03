@@ -17,7 +17,6 @@ env:
   SNOWFLAKE_WAREHOUSE: "COMPUTE_XS"
   SNOWFLAKE_DATABASE: "TRESTLE"
   APP_NAME: "TRESTLE_VALIDATE_PHONE"
-  APP_VERSION: ${{ github.sha }}
 
 jobs:
   validate-and-deploy:
@@ -66,30 +65,30 @@ jobs:
 
       - name: Deploy app with snow app run
         run: |
-          VERSION_TAG="${{ env.APP_VERSION }}"
+          # VERSION_TAG="${{ env.APP_VERSION }}"
           
           # Create a deployment.yml file for snow app run
-          cat > deployment.yml << EOF
-          app_name: $APP_NAME
-          version: $VERSION_TAG
-          target_environment: $TARGET_ENVIRONMENT
-          target_roles:
-            - PUBLIC
-          EOF
+          # cat > deployment.yml << EOF
+          # app_name: $APP_NAME
+          # version: $VERSION_TAG
+          # target_environment: $TARGET_ENVIRONMENT
+          # target_roles:
+          #   - PUBLIC
+          # EOF
           
           # Run the deployment command
           snow app run --connection github_actions
       
       - name: create new patch version
         run: | 
-          PATCH_VERSION=( snow app version list -c trestle --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
+          PATCH_VERSION=( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
-          snow app version create V1 -c trestle --patch $PATCH_VERSION
-          
+          snow app version create V1 -c github_actions --patch $PATCH_VERSION
+
       - name: Register version as released (production only)
         if: success() && github.ref == 'refs/heads/main'
         run: |
-          snow app version release --connection github_actions
+          snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
 
       - name: Post-deployment notification
         if: success()
