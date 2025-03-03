@@ -1,0 +1,20 @@
+# This is a project definition file, a required component if you intend to use Snowflake CLI in a project directory such as this template.
+
+definition_version: 2
+entities:
+  pkg:
+    type: application package
+    identifier: TRESTLE_VALIDATE_PHONE_PACKAGE
+    artifacts:
+      - src: app/*
+        dest: ./
+    
+    manifest: app/manifest.yml
+    
+  app:
+    type: application
+    from:
+      target: pkg
+    identifier: TRESTLE_VALIDATE_PHONE
+
+
