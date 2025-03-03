@@ -34,7 +34,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install snowflake-cli-labs
-          curl -L -o /usr/bin/jq.exe https://github.com/jqlang/jq/releases/latest/download/jq-win64.exe
+          sudo apt-get install jq
     
 
       - name: Configure Snowflake Connection Profile
