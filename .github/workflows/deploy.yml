@@ -50,6 +50,8 @@ jobs:
           database = "$SNOWFLAKE_DATABASE"
           EOF
 
+          chmod 0600 /home/runner/.snowflake/config.toml
+
       - name: Set deployment environment
         id: set-environment
         run: |
@@ -77,6 +79,7 @@ jobs:
           # EOF
           
           # Run the deployment command
+          
           snow app run --connection github_actions
       
       - name: create new patch version
