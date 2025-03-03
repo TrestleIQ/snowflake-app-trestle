@@ -86,7 +86,7 @@ jobs:
       
       - name: create new patch version
         run: | 
-          PATCH_VERSION=( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
+          PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
           snow app version create V1 -c github_actions --patch $PATCH_VERSION
 
