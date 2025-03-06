@@ -86,6 +86,7 @@ jobs:
           snow app run --connection github_actions
       
       - name: create new patch version
+        if: success() && github.ref == 'refs/heads/main'
         run: | 
           cd phone_validation
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
