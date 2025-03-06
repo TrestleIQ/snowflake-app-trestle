@@ -65,6 +65,7 @@ jobs:
 
       - name: Validate app
         run: |
+          cd phone_validation
           snow app validate --connection github_actions
 
       - name: Deploy app with snow app run
