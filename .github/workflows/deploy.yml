@@ -1,36 +1,142 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Deploy Snowflake Native App
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main ]
+  workflow_dispatch:  # Allows manual triggering
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+env:
+  SNOWFLAKE_ACCOUNT: "WYNRKMV-CWB34849"
+  SNOWFLAKE_USERNAME: "CHANDRATRESTLE"
+  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+  SNOWFLAKE_ROLE: "ACCOUNTADMIN"
+  SNOWFLAKE_WAREHOUSE: "COMPUTE_XS"
+  SNOWFLAKE_DATABASE: "TRESTLE"
+  APP_NAME: "TRESTLE_VALIDATE_PHONE"
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  validate-and-deploy:
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Install Snowflake CLI
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          python -m pip install --upgrade pip
+          pip install snowflake-cli-labs==3.4.1
+          sudo apt-get install jq
+
+          snow --version
+    
+
+      - name: Configure Snowflake Connection Profile
+        run: |
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/config.toml << EOF
+          [connections.github_actions]
+          account = "$SNOWFLAKE_ACCOUNT"
+          user = "$SNOWFLAKE_USERNAME"
+          password = "$SNOWFLAKE_PASSWORD"
+          role = "$SNOWFLAKE_ROLE"
+          warehouse = "$SNOWFLAKE_WAREHOUSE"
+          database = "$SNOWFLAKE_DATABASE"
+          EOF
+
+          chmod 0600 /home/runner/.snowflake/config.toml
+
+      - name: Set deployment environment
+        id: set-environment
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "TARGET_ENVIRONMENT=production" >> $GITHUB_ENV
+          else
+            echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
+          fi
+
+      - name: Validate app
+        run: |
+          cd phone_validation
+          snow app validate --connection github_actions
+
+      - name: Deploy app with snow app run
+        run: |
+          # VERSION_TAG="${{ env.APP_VERSION }}"
+          
+          # Create a deployment.yml file for snow app run
+          # cat > deployment.yml << EOF
+          # app_name: $APP_NAME
+          # version: $VERSION_TAG
+          # target_environment: $TARGET_ENVIRONMENT
+          # target_roles:
+          #   - PUBLIC
+          # EOF
+          
+          # Run the deployment command
+          cd phone_validation
+          snow app run --connection github_actions
+      
+      - name: create new patch version
+        if: success() && github.ref == 'refs/heads/main'
+        run: | 
+          cd phone_validation
+          PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
+          PATCH_VERSION=$((PATCH_VERSION + 1))
+          snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
+
+      - name: Register version as released (production only)
+        if: success() && github.ref == 'refs/heads/main'
+        run: |
+          cd phone_validation
+          snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
+
+      - name: Post-deployment notification
+        if: success()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            const deployment = {
+              environment: process.env.TARGET_ENVIRONMENT,
+              app_name: process.env.APP_NAME,
+              version: process.env.APP_VERSION,
+              workflow_run: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`
+            };
+            
+            // If this is a PR, comment on the PR
+            if (context.issue.number) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `✅ Snowflake Native App deployed successfully!\n\n\`\`\`json\n${JSON.stringify(deployment, null, 2)}\n\`\`\``
+              });
+            }
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { repo, owner } = context.repo;
+            
+            // If this is a PR, comment on the PR
+            if (context.issue.number) {
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `❌ Snowflake Native App deployment failed! Check the [workflow run](https://github.com/${owner}/${repo}/actions/runs/${context.runId}) for details.`
+              });
+            }
