@@ -91,7 +91,7 @@ jobs:
           cd phone_validation
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
-          # snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
+          ## snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
 
       - name: Register version as released (production only)
         if: success() && github.ref != 'refs/heads/main'
