@@ -63,7 +63,7 @@ jobs:
                 echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
               fi
 
-                readarray -t paths < <(git diff --name-only main | awk '{print $2}' | awk -F'/' '{print $1}')
+                readarray -t paths < <(git diff --name-only HEAD^ | awk '{print $2}' | awk -F'/' '{print $1}')
                 # Convert to GitHub Actions output
                 echo "$paths"
                 echo "${paths[1]}"
