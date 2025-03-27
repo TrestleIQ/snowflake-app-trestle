@@ -16,7 +16,7 @@ env:
   SNOWFLAKE_ROLE: "ACCOUNTADMIN"
   SNOWFLAKE_WAREHOUSE: "COMPUTE_XS"
   SNOWFLAKE_DATABASE: "TRESTLE"
-  APP_NAME: "TRESTLE_VALIDATE_PHONE"
+  #APP_NAME: "TRESTLE_VALIDATE_PHONE"
 
 jobs:
   validate-and-deploy:
@@ -55,52 +55,57 @@ jobs:
           chmod 0600 /home/runner/.snowflake/config.toml
 
       - name: Set deployment environment
+        env:
+            GH_TOKEN: ${{ github.token }}
         id: set-environment
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "TARGET_ENVIRONMENT=production" >> $GITHUB_ENV
-          else
-            echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
+              if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+                echo "TARGET_ENVIRONMENT=production" >> $GITHUB_ENV
+              else
+                echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
+              fi
+                echo "${{ toJson(github.event.pull_request.head.repo.full_name) }}" 
+                readarray -t paths < <(git diff --name-status | awk '{print$2}' | grep -v "^.g" | awk -F '/' '{print$1}')
+                # Convert to GitHub Actions output
+                echo "$paths"
+                echo "${paths[1]}"
+                echo "CHANGED_DIRS=$paths" >> $GITHUB_ENV
+            
+        
+        
+      - name: Validate and deploy app
+        run: |
+          echo "$CHANGED_DIRS"
+          for dir in $CHANGED_DIRS; do 
+          cd $dir
+          validate=$( snow app validate -c trestle --format json | jq ".status" )
+          echo "$validate"
+          if $validate =="SUCCESS"; then
+          deploy=$( snow app run --connection github_actions --format json | jq .message )
+          echo "$deploy"
           fi
-
-      - name: Validate app
-        run: |
-          cd phone_validation
-          snow app validate --connection github_actions
-
-      - name: Deploy app with snow app run
-        run: |
-          # VERSION_TAG="${{ env.APP_VERSION }}"
-          
-          # Create a deployment.yml file for snow app run
-          # cat > deployment.yml << EOF
-          # app_name: $APP_NAME
-          # version: $VERSION_TAG
-          # target_environment: $TARGET_ENVIRONMENT
-          # target_roles:
-          #   - PUBLIC
-          # EOF
-          
-          # Run the deployment command
-          cd phone_validation
-          snow app run --connection github_actions
+          done   
       
       - name: create new patch version
-        if: success() && github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main' 
         run: | 
-          cd phone_validation
+          for dir in $CHANGED_DIRS; do
+          cd $dir
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
           # snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
-
+          done
+          
       - name: Register version as released (production only)
         if: success() && github.ref != 'refs/heads/main'
         run: |
-          cd phone_validation
-          PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
-          PATCH_VERSION=$((PATCH_VERSION))
-          snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
-
+            for dir in $CHANGED_DIRS; do
+              cd $dir
+              PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
+              PATCH_VERSION=$((PATCH_VERSION))
+              # snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
+            done
+            
       - name: Post-deployment notification
         if: success()
         uses: actions/github-script@v6
