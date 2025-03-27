@@ -16,7 +16,7 @@ env:
   SNOWFLAKE_ROLE: "ACCOUNTADMIN"
   SNOWFLAKE_WAREHOUSE: "COMPUTE_XS"
   SNOWFLAKE_DATABASE: "TRESTLE"
-  APP_NAME: "TRESTLE_VALIDATE_PHONE"
+  #APP_NAME: "TRESTLE_VALIDATE_PHONE"
 
 jobs:
   validate-and-deploy:
@@ -62,28 +62,23 @@ jobs:
           else
             echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
           fi
-
-      - name: Validate app
-        run: |
-          cd phone_validation
-          snow app validate --connection github_actions
-
-      - name: Deploy app with snow app run
-        run: |
-          # VERSION_TAG="${{ env.APP_VERSION }}"
           
-          # Create a deployment.yml file for snow app run
-          # cat > deployment.yml << EOF
-          # app_name: $APP_NAME
-          # version: $VERSION_TAG
-          # target_environment: $TARGET_ENVIRONMENT
-          # target_roles:
-          #   - PUBLIC
-          # EOF
-          
-          # Run the deployment command
-          cd phone_validation
+            readarray -t paths < <(git diff --name-status main | awk '{print $2}' | awk -F'/' '{print $1}')
+            # Convert to GitHub Actions output
+            echo "files<<EOF" >> $GITHUB_OUTPUT
+            echo "$paths" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+        
+        
+      - name: Validate and deploy app
+        run: |
+          for dir in ${{ steps.paths.outputs.files }}; do 
+          cd $dir
+          validate=$( snow app validate -c trestle --format json | jq ".status" )
+          if $validate =="SUCCESS"; then
           snow app run --connection github_actions
+          fi
+          done   
       
       - name: create new patch version
         if: success() && github.ref == 'refs/heads/main'
@@ -99,7 +94,7 @@ jobs:
           cd phone_validation
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION))
-          snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
+          # snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
 
       - name: Post-deployment notification
         if: success()
