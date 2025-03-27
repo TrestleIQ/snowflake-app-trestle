@@ -63,8 +63,10 @@ jobs:
             echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
           fi
           
-            readarray -t paths < <(git diff --name-status main | awk '{print $2}' | awk -F'/' '{print $1}')
+            readarray -t paths < <(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | awk '{print $2}' | awk -F'/' '{print $1}')
             # Convert to GitHub Actions output
+            echo "$paths"
+            echo "${paths[1]}"
             echo "changed_dirs=$paths" >> $GITHUB_ENV
             
         
