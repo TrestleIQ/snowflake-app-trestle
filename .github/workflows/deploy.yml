@@ -58,9 +58,9 @@ jobs:
         id: set-environment
         run: |
             # Fetch full git history
-            git fetch --prune --unshallow
+          git fetch --prune --unshallow
 
-    # Determine the default branch
+            # Determine the default branch
           DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d ":" -f 2 | tr -d '[:space:]')
           if [[ "${{ github.ref }}" == "refs/heads/$DEFAULT_BRANCH" ]]; then
             echo "TARGET_ENVIRONMENT=production" >> $GITHUB_ENV
