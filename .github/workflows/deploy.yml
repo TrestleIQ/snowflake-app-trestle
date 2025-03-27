@@ -57,13 +57,18 @@ jobs:
       - name: Set deployment environment
         id: set-environment
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # Fetch full git history
+            git fetch --prune --unshallow
+
+    # Determine the default branch
+          DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d ":" -f 2 | tr -d '[:space:]')
+          if [[ "${{ github.ref }}" == "refs/heads/$DEFAULT_BRANCH" ]]; then
             echo "TARGET_ENVIRONMENT=production" >> $GITHUB_ENV
           else
             echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
           fi
-          
-            readarray -t paths < <(git diff --name-only main | awk '{print $2}' | awk -F'/' '{print $1}')
+
+            readarray -t paths < <(git diff --name-only $DEFAULT_BRANCH | awk '{print $2}' | awk -F'/' '{print $1}')
             # Convert to GitHub Actions output
             echo "$paths"
             echo "${paths[1]}"
