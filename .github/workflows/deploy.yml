@@ -65,17 +65,14 @@ jobs:
           
             readarray -t paths < <(git diff --name-status main | awk '{print $2}' | awk -F'/' '{print $1}')
             # Convert to GitHub Actions output
-            echo "files<<EOF" >> $GITHUB_OUTPUT
-            echo "$paths" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "changed_dirs=$paths" >> $GITHUB_ENV
+            
         
         
       - name: Validate and deploy app
-        env:
-            CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
         run: |
-          echo "$CHANGED_FILES"
-          for dir in $CHANGED_FILES; do 
+          echo "$changed_dirs"
+          for dir in $changed_dirs; do 
           cd $dir
           validate=$( snow app validate -c trestle --format json | jq ".status" )
           echo "$validate"
@@ -86,11 +83,9 @@ jobs:
           done   
       
       - name: create new patch version
-        env:
-            CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
         if: success() && github.ref == 'refs/heads/main' 
         run: | 
-          for dir in $CHANGED_FILES; do
+          for dir in $changed_dirs; do
           cd $dir
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
@@ -98,11 +93,9 @@ jobs:
           done
           
       - name: Register version as released (production only)
-        env:
-            CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
         if: success() && github.ref != 'refs/heads/main'
         run: |
-            for dir in $CHANGED_FILES; do
+            for dir in $changed_dirs; do
               cd $dir
               PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
               PATCH_VERSION=$((PATCH_VERSION))
