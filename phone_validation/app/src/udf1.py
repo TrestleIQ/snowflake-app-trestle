@@ -16,6 +16,7 @@ class validate_phone:
         headers = {
             "x-api-key": API_KEY
         }
+        
         responses = []
         for phno in ph_nos:
             data = requests.get(url+f"?phone={phno}", headers=headers)
