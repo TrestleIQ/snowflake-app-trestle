@@ -65,7 +65,7 @@ jobs:
                 echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
               fi
                 echo "${{ toJson(github.event.pull_request.head.repo.full_name) }}"
-                git diff --name-status | awk '{print $2}' | awk -F'/' '{print $1}' | grep -v "^.g"
+                git diff --name-status 
                 readarray -t paths < <(git diff --name-only  | cut -d'/' -f1 | grep -v "^.g" | sort -u)
                 # Convert to GitHub Actions output
                 echo "$paths"
