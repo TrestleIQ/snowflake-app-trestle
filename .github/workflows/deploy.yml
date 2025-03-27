@@ -63,18 +63,18 @@ jobs:
             echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
           fi
           
-            readarray -t paths < <(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | awk '{print $2}' | awk -F'/' '{print $1}')
+            readarray -t paths < <(git diff --name-only main | awk '{print $2}' | awk -F'/' '{print $1}')
             # Convert to GitHub Actions output
             echo "$paths"
             echo "${paths[1]}"
-            echo "changed_dirs=$paths" >> $GITHUB_ENV
+            echo "CHANGED_DIRS=$paths" >> $GITHUB_ENV
             
         
         
       - name: Validate and deploy app
         run: |
-          echo "$changed_dirs"
-          for dir in $changed_dirs; do 
+          echo "$CHANGED_DIRS"
+          for dir in $CHANGED_DIRS; do 
           cd $dir
           validate=$( snow app validate -c trestle --format json | jq ".status" )
           echo "$validate"
@@ -87,7 +87,7 @@ jobs:
       - name: create new patch version
         if: success() && github.ref == 'refs/heads/main' 
         run: | 
-          for dir in $changed_dirs; do
+          for dir in $CHANGED_DIRS; do
           cd $dir
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
@@ -97,7 +97,7 @@ jobs:
       - name: Register version as released (production only)
         if: success() && github.ref != 'refs/heads/main'
         run: |
-            for dir in $changed_dirs; do
+            for dir in $CHANGED_DIRS; do
               cd $dir
               PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
               PATCH_VERSION=$((PATCH_VERSION))
