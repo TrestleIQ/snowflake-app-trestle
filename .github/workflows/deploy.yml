@@ -75,19 +75,22 @@ jobs:
           for dir in ${{ steps.paths.outputs.files }}; do 
           cd $dir
           validate=$( snow app validate -c trestle --format json | jq ".status" )
+          echo "$validate"
           if $validate =="SUCCESS"; then
-          snow app run --connection github_actions
+          deploy=$( snow app run --connection github_actions --format json | jq .message )
+          echo "$deploy"
           fi
           done   
       
       - name: create new patch version
-        if: success() && github.ref == 'refs/heads/main'
+        if: success() && github.ref == 'refs/heads/main' 
         run: | 
-          cd phone_validation
+          for dir in ${{ steps.paths.outputs.files }}; do
+          cd $dir
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
-          ## snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
-
+          # snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
+          done
       - name: Register version as released (production only)
         if: success() && github.ref != 'refs/heads/main'
         run: |
