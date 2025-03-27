@@ -72,7 +72,8 @@ jobs:
         
       - name: Validate and deploy app
         run: |
-          for dir in ${{ steps.paths.outputs.files }}; do 
+          echo "${{ steps.paths.outputs.files }}"
+          for dir in ${{ steps.set-environment.outputs.files }}; do 
           cd $dir
           validate=$( snow app validate -c trestle --format json | jq ".status" )
           echo "$validate"
@@ -85,20 +86,23 @@ jobs:
       - name: create new patch version
         if: success() && github.ref == 'refs/heads/main' 
         run: | 
-          for dir in ${{ steps.paths.outputs.files }}; do
+          for dir in ${{ steps.set-environment.outputs.files }}; do
           cd $dir
           PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
           PATCH_VERSION=$((PATCH_VERSION + 1))
           # snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
           done
+          
       - name: Register version as released (production only)
         if: success() && github.ref != 'refs/heads/main'
         run: |
-          cd phone_validation
-          PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
-          PATCH_VERSION=$((PATCH_VERSION))
-          # snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
-
+            for dir in ${{ steps.set-environment.outputs.files }}; do
+              cd $dir
+              PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
+              PATCH_VERSION=$((PATCH_VERSION))
+              # snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
+            done
+            
       - name: Post-deployment notification
         if: success()
         uses: actions/github-script@v6
