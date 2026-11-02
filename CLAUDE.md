@@ -29,5 +29,10 @@ rm -rf output app/src/__pycache__ \
 - `.github/workflows/deploy.yml` installs `snowflake-cli-labs==3.4.1` with `click<8.2`.
   click ≥ 8.2 crashes CLI 3.4.1 on startup (`make_metavar() missing 'ctx'`). Remove the
   pin only when upgrading the CLI (current package name: `snowflake-cli`).
-- PR runs deploy (`snow app run`) and set the default release directive in account WYNRKMV-CWB34849.
-- On `main`, `snow app version create` is commented out — releasing a new version is manual.
+- CI (`deploy.yml`) is an **offline build check only** — compile handlers + `snow app bundle`. It does
+  **not** log in to Snowflake: headless runners can't pass the now-mandatory MFA, so the shared
+  `CHANDRATRESTLE` password login was removed.
+- **Deploying is manual**: `snow app run` / `snow app version create` / `snow app release-directive set
+  default`, run locally as ACCOUNTADMIN via a browser-auth (`authenticator=externalbrowser`) connection
+  to account WYNRKMV-CWB34849. Automated deploy returns once a `TYPE=SERVICE` user with key-pair auth
+  replaces the shared login.

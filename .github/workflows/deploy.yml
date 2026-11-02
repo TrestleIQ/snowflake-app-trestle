@@ -1,6 +1,12 @@
-# This is a basic workflow to help you get started with Actions
+# Offline build check for the Snowflake Native App.
+#
+# This workflow intentionally does NOT log in to Snowflake. Snowflake now
+# requires MFA on every password login, which a headless runner cannot satisfy,
+# so the old CHANDRATRESTLE password login was removed. Deploying (validate /
+# app run / version / release-directive) is done manually for now; it will
+# return here once a TYPE=SERVICE user with key-pair auth is set up (see CLAUDE.md).
 
-name: Deploy Snowflake Native App
+name: Build Snowflake Native App
 
 on:
   push:
@@ -9,17 +15,8 @@ on:
     branches: [ main ]
   workflow_dispatch:  # Allows manual triggering
 
-env:
-  SNOWFLAKE_ACCOUNT: "WYNRKMV-CWB34849"
-  SNOWFLAKE_USERNAME: "CHANDRATRESTLE"
-  SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-  SNOWFLAKE_ROLE: "ACCOUNTADMIN"
-  SNOWFLAKE_WAREHOUSE: "COMPUTE_XS"
-  SNOWFLAKE_DATABASE: "TRESTLE"
-  APP_NAME: "TRESTLE_VALIDATE_PHONE"
-
 jobs:
-  validate-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -35,96 +32,18 @@ jobs:
           python -m pip install --upgrade pip
           # click 8.2+ breaks the typer version bundled with CLI 3.4.1 (make_metavar 'ctx' error)
           pip install snowflake-cli-labs==3.4.1 "click<8.2"
-          sudo apt-get install jq
-
           snow --version
-    
 
-      - name: Configure Snowflake Connection Profile
-        run: |
-          mkdir -p ~/.snowflake
-          cat > ~/.snowflake/config.toml << EOF
-          [connections.github_actions]
-          account = "$SNOWFLAKE_ACCOUNT"
-          user = "$SNOWFLAKE_USERNAME"
-          password = "$SNOWFLAKE_PASSWORD"
-          role = "$SNOWFLAKE_ROLE"
-          warehouse = "$SNOWFLAKE_WAREHOUSE"
-          database = "$SNOWFLAKE_DATABASE"
-          EOF
-
-          chmod 0600 /home/runner/.snowflake/config.toml
-
-      - name: Set deployment environment
-        id: set-environment
-        run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "TARGET_ENVIRONMENT=production" >> $GITHUB_ENV
-          else
-            echo "TARGET_ENVIRONMENT=development" >> $GITHUB_ENV
-          fi
-
-      - name: Validate app
+      - name: Compile Python handlers
         run: |
           cd phone_validation
-          snow app validate --connection github_actions
+          python -m py_compile app/src/udf1.py app/src/udf.py
 
-      - name: Deploy app with snow app run
-        run: |
-          # VERSION_TAG="${{ env.APP_VERSION }}"
-          
-          # Create a deployment.yml file for snow app run
-          # cat > deployment.yml << EOF
-          # app_name: $APP_NAME
-          # version: $VERSION_TAG
-          # target_environment: $TARGET_ENVIRONMENT
-          # target_roles:
-          #   - PUBLIC
-          # EOF
-          
-          # Run the deployment command
-          cd phone_validation
-          snow app run --connection github_actions
-      
-      - name: create new patch version
-        if: success() && github.ref == 'refs/heads/main'
-        run: | 
-          cd phone_validation
-          PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
-          PATCH_VERSION=$((PATCH_VERSION + 1))
-          # snow app version create V1 -c github_actions --patch $PATCH_VERSION --force
-
-      - name: Register version as released (production only)
-        if: success() && github.ref != 'refs/heads/main'
+      - name: Bundle app (offline)
         run: |
           cd phone_validation
-          PATCH_VERSION=$( snow app version list -c github_actions --format json | jq -r ' sort_by(.created_on) | reverse | .[0] | .patch')
-          PATCH_VERSION=$((PATCH_VERSION))
-          snow app release-directive set default --version V1 --patch $PATCH_VERSION -c github_actions
-
-      - name: Post-deployment notification
-        if: success()
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const { repo, owner } = context.repo;
-            const deployment = {
-              environment: process.env.TARGET_ENVIRONMENT,
-              app_name: process.env.APP_NAME,
-              version: process.env.APP_VERSION,
-              workflow_run: `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`
-            };
-            
-            // If this is a PR, comment on the PR
-            if (context.issue.number) {
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: `✅ Snowflake Native App deployed successfully!\n\n\`\`\`json\n${JSON.stringify(deployment, null, 2)}\n\`\`\``
-              });
-            }
+          rm -rf output app/src/__pycache__
+          snow app bundle
 
       - name: Notify on failure
         if: failure()
@@ -133,13 +52,11 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const { repo, owner } = context.repo;
-            
-            // If this is a PR, comment on the PR
             if (context.issue.number) {
               github.rest.issues.createComment({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                body: `❌ Snowflake Native App deployment failed! Check the [workflow run](https://github.com/${owner}/${repo}/actions/runs/${context.runId}) for details.`
+                body: `❌ Build failed! Check the [workflow run](https://github.com/${owner}/${repo}/actions/runs/${context.runId}) for details.`
               });
             }
