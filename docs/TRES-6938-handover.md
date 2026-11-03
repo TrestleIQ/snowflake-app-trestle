@@ -5,8 +5,8 @@
 | **Ticket** | [TRES-6938](https://trestleiq.atlassian.net/browse/TRES-6938) — Upgrade Snowflake app to newer Python version |
 | **Repo** | `snowflake-app-trestle` |
 | **Owner** | Shivani Singh |
-| **Last updated** | 2026-10-26 |
-| **Status** | Code change done and locally verified. **Snowflake testing not started** (account access being sorted out). Not committed, no PR. |
+| **Last updated** | 2026-11-03 |
+| **Status** | ✅ **RELEASED.** PR #4 merged to `main`; V1 patch 10 (3.14) created and set as DEFAULT release directive on 2026-11-02 23:31 PST. See §14. |
 
 ---
 
@@ -260,6 +260,36 @@ No dependent PRs in other repos.
 ## 12. Docs
 - `CLAUDE.md` was added (runtime and stack, local build, CI/deploy notes, including the `click` pin).
 - `docs/context.md` is still missing (required by org standards).
+
+## 14. Release record (2026-11-02 / 03)
+
+**Released.** `TRESTLE_VALIDATE_PHONE_PACKAGE` DEFAULT release directive now points at **V1 / patch 10** (Python 3.14).
+
+| Step | Detail |
+|---|---|
+| PR | [PR #4](https://github.com/TrestleIQ/snowflake-app-trestle/pull/4) merged to `main` (runtime change `024a18b`, CI offline-build `2cb8500`) |
+| Version | `snow app version create V1` → **patch 10**, created 2026-11-02 19:44 PST, state READY, review APPROVED |
+| Release | `ALTER APPLICATION PACKAGE TRESTLE_VALIDATE_PHONE_PACKAGE SET DEFAULT RELEASE DIRECTIVE VERSION = V1 PATCH = 10;` applied 2026-11-02 23:31 PST (was V1/9) |
+| Account | `WYNRKMV-CWB34849`, role ACCOUNTADMIN |
+
+**Pre-flight verified before the flip:** patch 10 READY+APPROVED; handler `udf1.py` reads the key from the Snowflake secret (`get_generic_secret_string('cred')`) — no hardcoded key; working tree matched committed `main`; no key in git history; `setup_script.sql` runtime = `'3.14'`.
+
+**How 3.14 was proven:** `create_eai_objects()` returned `SUCCESS` on a 3.14 test app built from patch 10 (`TRESTLE_VP_PATCH10_TEST`) and on the `_DEV` app — the exact step that **hard-fails on 3.9** ("Python runtime version 3.9 is decommissioned"). A live `_DEV` call executed end-to-end on 3.14 (read secret → called `api.trestleiq.com` → parsed JSON); it returned `AUTHENTICATION_FAILED` because the provider test key in `TRESTLE_API_KEY` is stale — a key-value issue, **not** a runtime/code issue, and not customer-affecting (customers use their own keys).
+
+**Rollback (if ever needed):** `ALTER APPLICATION PACKAGE TRESTLE_VALIDATE_PHONE_PACKAGE SET DEFAULT RELEASE DIRECTIVE VERSION = V1 PATCH = 9;` — but patch 9 is the broken 3.9, so only useful if patch 10 itself were bad.
+
+### Post-release checklist
+- [ ] Verify the provider's own installed app upgraded: `CALL TRESTLE_VALIDATE_PHONE.code_schema.create_eai_objects();` → expect `SUCCESS`.
+- [ ] Customer comms (AC4): existing customers run `CALL <app>.code_schema.create_eai_objects();` once to rebuild the UDTF on 3.14.
+- [ ] Cleanup: `mv snowflake.local.yml.bak snowflake.local.yml`; drop test objects `TRESTLE_VP_PATCH10_TEST`, `TRESTLE_VALIDATE_PHONE_DEV`, `TRESTLE_VALIDATE_PHONE_PACKAGE_DEV`.
+- [ ] (Optional) Refresh the stale provider test key in `TRESTLE_API_KEY` for a fully-green live test.
+
+### Follow-ups (separate tickets)
+- Stand up a `TYPE=SERVICE` deployer user + key-pair so CI can build/release from `main` (MFA blocks headless login today).
+- Create the missing `docs/context.md`.
+- Remove dead code `app/src/udf.py`.
+
+---
 
 ## 13. References
 - [Snowflake Python Runtime Support policy](https://docs.snowflake.com/en/developer-guide/python-runtime-support-policy)
