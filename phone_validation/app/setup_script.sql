@@ -80,7 +80,7 @@ language python
 PACKAGES=('snowflake-snowpark-python', 'requests') 
 external_access_integrations =  (reference('consumer_external_access'))
 SECRETS = ('cred' = reference('consumer_secret'))
-RUNTIME_VERSION = '3.9'
+RUNTIME_VERSION = '3.14'
 imports = ('/src/udf1.py')
 handler = 'udf1.validate_phone';
 
