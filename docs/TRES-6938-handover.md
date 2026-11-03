@@ -279,15 +279,24 @@ No dependent PRs in other repos.
 **Rollback (if ever needed):** `ALTER APPLICATION PACKAGE TRESTLE_VALIDATE_PHONE_PACKAGE SET DEFAULT RELEASE DIRECTIVE VERSION = V1 PATCH = 9;` — but patch 9 is the broken 3.9, so only useful if patch 10 itself were bad.
 
 ### Post-release checklist
-- [ ] Verify the provider's own installed app upgraded: `CALL TRESTLE_VALIDATE_PHONE.code_schema.create_eai_objects();` → expect `SUCCESS`.
-- [ ] Customer comms (AC4): existing customers run `CALL <app>.code_schema.create_eai_objects();` once to rebuild the UDTF on 3.14.
+- [x] **Provider app verified on 3.14 (2026-11-03).** The unversioned dev app `TRESTLE_VALIDATE_PHONE` was refreshed via `snow app run`, then `create_eai_objects()` → `SUCCESS` and `validate_phone` executed end-to-end (read secret → api.trestleiq.com → JSON). The `AUTHENTICATION_FAILED` in `data` is the stale provider test key in `TRESTLE_API_KEY`, not a runtime issue. (Customer-representative proof = the *versioned* patch-10 test app `TRESTLE_VP_PATCH10_TEST`.)
+- [ ] **Customer comms (AC4)** — send the upgrade sequence below to existing customers.
 - [ ] Cleanup: `mv snowflake.local.yml.bak snowflake.local.yml`; drop test objects `TRESTLE_VP_PATCH10_TEST`, `TRESTLE_VALIDATE_PHONE_DEV`, `TRESTLE_VALIDATE_PHONE_PACKAGE_DEV`.
 - [ ] (Optional) Refresh the stale provider test key in `TRESTLE_API_KEY` for a fully-green live test.
+
+### Customer upgrade sequence (AC4)
+Customers have a **versioned** install (from the listing / release directive), so they do **not** use `snow app run` (that is a provider/dev command, run from the project). Order matters:
+1. **Upgrade the app to the new version.** Snowflake auto-upgrades consumer installs to the new default release directive (patch 10); to force it immediately, the customer runs `ALTER APPLICATION <app_name> UPGRADE;` in their own account.
+2. **Rebuild the function on 3.14:** `CALL <app_name>.code_schema.create_eai_objects();`
+3. (verify) `DESCRIBE FUNCTION <app_name>.code_schema.validate_phone(ARRAY);` → runtime `3.14`.
+
+> If a customer runs step 2 **before** the app has upgraded (still on patch 9 / 3.9), they get "Python runtime version 3.9 is decommissioned". The upgrade (step 1) must land first. A `validate_phone` function already created on 3.9 keeps working (invocation of existing functions is still allowed) until they do this.
 
 ### Follow-ups (separate tickets)
 - Stand up a `TYPE=SERVICE` deployer user + key-pair so CI can build/release from `main` (MFA blocks headless login today).
 - Create the missing `docs/context.md`.
 - Remove dead code `app/src/udf.py`.
+- Align `snowflake.yml` `distribution` to `external` — the package is `external` but the project file says `internal`, so `snow app run` warns on every deploy.
 
 ---
 
