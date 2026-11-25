@@ -3,6 +3,9 @@
 Snowflake Native App that lets Snowflake customers run Trestle Phone Validation
 (`GET https://api.trestleiq.com/3.0/phone_intel`) on phone numbers in their own tables.
 
+Deep context (Snowflake objects, CI vs manual release, why CI has its own package, failure modes,
+key rotation): `docs/context.md`.
+
 ## Layout
 - `phone_validation/snowflake.yml` — Snowflake CLI project: package `TRESTLE_VALIDATE_PHONE_PACKAGE`, test app `TRESTLE_VALIDATE_PHONE`
 - `phone_validation/app/manifest.yml` — references the customer grants: `CONSUMER_SECRET` (API key), `CONSUMER_EXTERNAL_ACCESS` (EAI to api.trestleiq.com)
