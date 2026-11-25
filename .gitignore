@@ -1,3 +1,4 @@
 phone_validation/output/*
 .idea/*
 .github
+phone_validation/snowflake.local.yml

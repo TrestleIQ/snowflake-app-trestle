@@ -26,13 +26,22 @@ rm -rf output app/src/__pycache__ \
 `snowflake.yml` uploads `app/*`, so delete `app/src/__pycache__` before any deploy.
 
 ## CI / Deploy
-- `.github/workflows/deploy.yml` installs `snowflake-cli-labs==3.4.1` with `click<8.2`.
-  click ≥ 8.2 crashes CLI 3.4.1 on startup (`make_metavar() missing 'ctx'`). Remove the
-  pin only when upgrading the CLI (current package name: `snowflake-cli`).
-- CI (`deploy.yml`) is an **offline build check only** — compile handlers + `snow app bundle`. It does
-  **not** log in to Snowflake: headless runners can't pass the now-mandatory MFA, so the shared
-  `CHANDRATRESTLE` password login was removed.
-- **Deploying is manual**: `snow app run` / `snow app version create` / `snow app release-directive set
-  default`, run locally as ACCOUNTADMIN via a browser-auth (`authenticator=externalbrowser`) connection
-  to account WYNRKMV-CWB34849. Automated deploy returns once a `TYPE=SERVICE` user with key-pair auth
-  replaces the shared login.
+- `.github/workflows/deploy.yml` installs `snowflake-cli==3.34.0` (the old `snowflake-cli-labs==3.4.1`
+  + `click<8.2` pin is gone).
+- `build` job: offline — compile handlers + `snow app bundle`. No Snowflake login.
+- `validate` job (TRES-7206): logs in to WYNRKMV-CWB34849 as `SVC_SNOWFLAKE_APP_CI` (`TYPE=SERVICE`,
+  key-pair / `SNOWFLAKE_JWT`, role `APP_DEPLOYER`) and runs `snow app validate` + `snow app run` against
+  the CI-only `TRESTLE_VALIDATE_PHONE_PACKAGE_CI` / `TRESTLE_VALIDATE_PHONE_CI`, via a generated
+  (git-ignored) `snowflake.local.yml`. Gated by the `snowflake-ci` GitHub environment (required
+  reviewers), which holds `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_CI_PRIVATE_KEY`,
+  `SNOWFLAKE_CI_PRIVATE_KEY_PASSPHRASE`. Fork PRs skip this job.
+- `APP_DEPLOYER` has only: USAGE on `COMPUTE_XS`, CREATE APPLICATION PACKAGE, CREATE APPLICATION. It has
+  **no** privileges on the prod package `TRESTLE_VALIDATE_PHONE_PACKAGE` — don't grant any.
+- **Releasing stays manual**: `snow app version create` / `snow app release-directive set default` on the
+  prod package, run locally as ACCOUNTADMIN via `authenticator=externalbrowser`. Never add these to CI.
+- The repo is public: Actions logs are public, so don't add debug output to the `validate` job.
+- Key rotation (needs a repo admin): the admin generates a new encrypted key pair locally, pipes the
+  private key + passphrase straight into the `snowflake-ci` secrets with `gh secret set`, and deletes the
+  local files. An ACCOUNTADMIN then sets the public key in the free slot
+  (`ALTER USER SVC_SNOWFLAKE_APP_CI SET RSA_PUBLIC_KEY[_2] = '...'`), checks the `RSA_PUBLIC_KEY*_FP`
+  fingerprint, and once CI is green `UNSET`s the old slot. Never commit a `.p8`.
